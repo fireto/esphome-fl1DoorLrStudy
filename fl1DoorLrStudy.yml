@@ -1,0 +1,340 @@
+### Multisensor main
+substitutions:
+  devicename: fl1-door-livingroom-study
+  upperDevicename: fl1DoorLivingroomStudy
+
+esphome:
+  name: $devicename
+  platform: ESP32
+  board: esp32-poe
+
+packages:
+  # wifi: !include common/wifi.yml
+  ethernet: !include common/ethernet.yml
+  api: !include common/api.yml
+  ota: !include common/ota.yml
+  mqtt: !include common/mqtt.yml
+  logger: !include common/logger.yml
+  # time: !include common/time.yml
+  web_server: !include common/webserver.yml
+
+
+# dashboard_import:
+#   package_import_url: github://esphome/bluetooth-proxies/olimex-esp32-poe-iso.yaml@main
+
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 1100ms
+    window: 1100ms
+    active: true
+
+# bluetooth_proxy:
+
+i2c:
+  sda: 13
+  scl: 16
+  scan: True
+
+# Global to store the on/off state of the lrEntryActive
+# this switch enables/disables the touch sensor opening study door from living room side
+globals:
+  - id: lrEntry
+    type: bool
+    restore_value: true
+    initial_value: 'true'
+
+# Load RooDe - people counter component using vlx53l1x sensor
+# https://github.com/Lyr3x/Roode
+external_components:
+  refresh: always
+  source:
+    type: git
+    url: https://github.com/Lyr3x/Roode
+    ref: master
+
+# vl53l1x time of flight sensor from ST
+# datasheet: https://www.st.com/resource/en/datasheet/vl53l1x.pdf
+# VL53L1X sensor configuration is separate from Roode people counting algorithm
+# detailed docs here: https://github.com/Lyr3x/Roode#platform-setup
+vl53l1x:
+  calibration:
+    ranging: auto
+
+roode:
+  id: roode_platform
+  sampling: 2
+  detection_thresholds:
+    min: 2% # default minimum is any distance
+    max: 65% # default maximum is 85%  
+  zones:  
+    invert: False
+
+# load module for PCF8574 Remote 8-Bit I/O Expanderfor I2C Bus
+# datasheet https://www.ti.com/lit/ds/symlink/pcf8574.pdf
+pcf8574:
+  - id: 'pcf8574_1'
+    address: 0x20
+    pcf8575: False
+
+button:
+# restart the controller from HA button  
+  - platform: restart
+    name: $upperDevicename Restart
+  
+# Trigger open study door action
+  - platform: template
+    name: Open Study door
+    id: doorLrStudyOpen
+    on_press:
+      - switch.turn_off: relay
+      - delay: 2s
+      - switch.turn_on: relay
+
+switch:
+  # Switch to enable/disable opening the study door from living room touch sensor (wallTouchLivingroom)
+  # It creates a "virtual" switch based on a global variable.
+  - platform: template
+    name: Enter Study from LivingRoom enable
+    id: lrEntryActive
+    restore_state: True
+    turn_on_action:
+      - globals.set:
+          id: lrEntry
+          value: 'true'
+    turn_off_action:
+      - globals.set:
+          id: lrEntry
+          value: 'false'
+    lambda: |-
+      return id(lrEntry);
+
+  # Internal switch to control the relay powering the magnetic door contacts
+  # Connected to pin 3 of the PCF8574
+  - platform: gpio
+    name: "Magnetic lock Relay"
+    id: relay
+    pin:
+      pcf8574: pcf8574_1
+      number: 2
+      mode:
+        output: True
+      inverted: False
+    device_class: switch
+    internal: True
+
+number:
+  - platform: roode
+    people_counter:
+      name: People Count
+
+binary_sensor:
+  - platform: status
+    name: $upperDevicename API Status
+
+  - platform: roode
+    presence_sensor:
+      name: $upperDevicename presence
+      filters:
+        - delayed_on_off: 500ms
+
+# RID sensor on the study door
+# Connected to pin 4 of the PCF8574
+  - platform: gpio
+    name: "fl1DoorLrStudyContact"
+    id: fl1DoorLrStudyContact
+    pin:
+      pcf8574: pcf8574_1
+      number: 3
+      mode:
+        input: True
+      inverted: False
+    device_class: door
+
+# TTP223 touch sensor
+# Connected to pin 1 of the PCF8574
+  - platform: gpio
+    name: "touchWallLivingroom"
+    pin:
+      pcf8574: pcf8574_1
+      number: 0
+      mode:
+        input: True
+      inverted: False
+    filters:
+      # Small filter, to debounce the button press.
+      - delayed_on: 250ms
+      - delayed_off: 250ms
+    on_press:
+      # Open door only if lrEntryActive is true.
+      then:
+        if:
+          condition:
+            and:
+              - switch.is_on: lrEntryActive
+              - binary_sensor.is_off: fl1DoorLrStudyContact
+          then:
+            - button.press: doorLrStudyOpen
+
+# TTP223 touch sensor
+# Connected to pin 2 of the PCF8574
+  - platform: gpio
+    name: "touchWallStudy"
+    pin:
+      pcf8574: pcf8574_1
+      number: 1
+      mode:
+        input: True
+      inverted: False
+    filters:
+      # Small filter, to debounce the button press.
+      - delayed_on: 250ms
+      - delayed_off: 250ms 
+    on_press:
+      # Open door only if lrEntryActive is true.
+      then:
+        if:
+          condition:
+            and:
+              - switch.is_on: lrEntryActive
+              - binary_sensor.is_off: fl1DoorLrStudyContact
+          then:
+            - button.press: doorLrStudyOpen
+
+# Illumination sensor bh1750
+# datasheet: 
+sensor:
+  - platform: bh1750
+    name: "$upperDevicename Illuminance"
+    address: 0x23
+    update_interval: 300s
+
+  - platform: uptime
+    name: Uptime Sensor
+    id: uptime_sensor
+    update_interval: 60s
+    internal: true
+    on_raw_value:
+      then:
+        - text_sensor.template.publish:
+            id: uptime_human
+            state: !lambda |-
+              int seconds = round(id(uptime_sensor).raw_state);
+              int days = seconds / (24 * 3600);
+              seconds = seconds % (24 * 3600);
+              int hours = seconds / 3600;
+              seconds = seconds % 3600;
+              int minutes = seconds /  60;
+              seconds = seconds % 60;
+              return (
+                (days ? String(days) + "d " : "") +
+                (hours ? String(hours) + "h " : "") +
+                (minutes ? String(minutes) + "m " : "") +
+                (String(seconds) + "s")
+              ).c_str();
+
+  # - platform: wifi_signal
+  #   name: $upperDevicename RSSI
+  #   update_interval: 60s
+
+
+  - platform: atc_mithermometer
+    mac_address: "A4:C1:38:6E:AD:63"
+    temperature:
+      name: "mi_1 Temperature"
+    humidity:
+      name: "mi_1 Humidity"
+    battery_level:
+      name: "mi_1 Battery-Level"
+    battery_voltage:
+      name: "mi_1 Battery-Voltage"
+
+  - platform: atc_mithermometer
+    mac_address: "A4:C1:38:E5:1A:78"
+    temperature:
+      name: "mi_2 Temperature"
+    humidity:
+      name: "mi_2 Humidity"
+    battery_level:
+      name: "mi_2 Battery-Level"
+    battery_voltage:
+      name: "mi_2 Battery-Voltage"
+
+  - platform: atc_mithermometer
+    mac_address: "A4:C1:38:64:30:9D"
+    temperature:
+      name: "mi_3 Temperature"
+    humidity:
+      name: "mi_3 Humidity"
+    battery_level:
+      name: "mi_3 Battery-Level"
+    battery_voltage:
+      name: "mi_3 Battery-Voltage"
+
+  - platform: atc_mithermometer
+    mac_address: "A4:C1:38:AA:ED:A7"
+    temperature:
+      name: "mi_4 Temperature"
+    humidity:
+      name: "mi_4 Humidity"
+    battery_level:
+      name: "mi_4 Battery-Level"
+    battery_voltage:
+      name: "mi_4 Battery-Voltage"
+
+  # - platform: atc_mithermometer
+  #   mac_address: "A4:C1:38:30:5D:3B"
+  #   temperature:
+  #     name: "mi_5 Temperature"
+  #   humidity:
+  #     name: "mi_5 Humidity"
+  #   battery_level:
+  #     name: "mi_5 Battery-Level"
+  #   battery_voltage:
+  #     name: "mi_5 Battery-Voltage"
+
+  # - platform: atc_mithermometer
+  #   mac_address: "A4:C1:38:31:F2:CE"
+  #   temperature:
+  #     name: "mi_6 Temperature"
+  #   humidity:
+  #     name: "mi_6 Humidity"
+  #   battery_level:
+  #     name: "mi_6 Battery-Level"
+  #   battery_voltage:
+  #     name: "mi_6 Battery-Voltage"
+
+  # - platform: atc_mithermometer
+  #   mac_address: "A4:C1:38:79:84:0F"
+  #   temperature:
+  #     name: "mi_7 Temperature"
+  #   humidity:
+  #     name: "mi_7 Humidity"
+  #   battery_level:
+  #     name: "mi_7 Battery-Level"
+  #   battery_voltage:
+  #     name: "mi_7 Battery-Voltage"
+
+  # - platform: atc_mithermometer
+  #   mac_address: "A4:C1:38:C9:D3:E7"
+  #   temperature:
+  #     name: "mi_8 Temperature"
+  #   humidity:
+  #     name: "mi_8 Humidity"
+  #   battery_level:
+  #     name: "mi_8 Battery-Level"
+  #   battery_voltage:
+  #     name: "mi_8 Battery-Voltage"    
+
+text_sensor:
+  - platform: roode
+    version:
+      name: $upperDevicename roode version
+  
+  - platform: roode
+    entry_exit_event:
+      name: $upperDevicename last direction
+
+  - platform: template
+    name: $upperDevicename Uptime Human Readable
+    id: uptime_human
+    icon: mdi:clock-start
