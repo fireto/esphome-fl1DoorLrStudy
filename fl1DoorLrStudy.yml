@@ -13,7 +13,7 @@ packages:
   ethernet: !include common/ethernet.yml
   api: !include common/api.yml
   ota: !include common/ota.yml
-  mqtt: !include common/mqtt.yml
+  # mqtt: !include common/mqtt.yml
   logger: !include common/logger.yml
   # time: !include common/time.yml
   web_server: !include common/webserver.yml
@@ -28,7 +28,7 @@ esp32_ble_tracker:
     window: 1100ms
     active: true
 
-# bluetooth_proxy:
+bluetooth_proxy:
 
 i2c:
   sda: 13
@@ -87,8 +87,8 @@ button:
     id: doorLrStudyOpen
     on_press:
       - switch.turn_off: relay
-      - delay: 2s
-      - switch.turn_on: relay
+      # - delay: 2s
+      # - switch.turn_on: relay
 
 switch:
   # Switch to enable/disable opening the study door from living room touch sensor (wallTouchLivingroom)
@@ -96,7 +96,7 @@ switch:
   - platform: template
     name: Enter Study from LivingRoom enable
     id: lrEntryActive
-    restore_state: True
+    restore_mode: RESTORE_DEFAULT_ON
     turn_on_action:
       - globals.set:
           id: lrEntry
@@ -149,6 +149,12 @@ binary_sensor:
         input: True
       inverted: False
     device_class: door
+    on_press:
+      then:
+        - switch.turn_off: relay
+    on_release: 
+      then:
+        - switch.turn_on: relay
 
 # TTP223 touch sensor
 # Connected to pin 1 of the PCF8574
@@ -208,78 +214,73 @@ sensor:
     address: 0x23
     update_interval: 300s
 
-  - platform: uptime
-    name: Uptime Sensor
-    id: uptime_sensor
-    update_interval: 60s
-    internal: true
-    on_raw_value:
-      then:
-        - text_sensor.template.publish:
-            id: uptime_human
-            state: !lambda |-
-              int seconds = round(id(uptime_sensor).raw_state);
-              int days = seconds / (24 * 3600);
-              seconds = seconds % (24 * 3600);
-              int hours = seconds / 3600;
-              seconds = seconds % 3600;
-              int minutes = seconds /  60;
-              seconds = seconds % 60;
-              return (
-                (days ? String(days) + "d " : "") +
-                (hours ? String(hours) + "h " : "") +
-                (minutes ? String(minutes) + "m " : "") +
-                (String(seconds) + "s")
-              ).c_str();
-
-  # - platform: wifi_signal
-  #   name: $upperDevicename RSSI
+  # - platform: uptime
+  #   name: Uptime Sensor
+  #   id: uptime_sensor
   #   update_interval: 60s
+  #   internal: true
+  #   on_raw_value:
+  #     then:
+  #       - text_sensor.template.publish:
+  #           id: uptime_human
+  #           state: !lambda |-
+  #             int seconds = round(id(uptime_sensor).raw_state);
+  #             int days = seconds / (24 * 3600);
+  #             seconds = seconds % (24 * 3600);
+  #             int hours = seconds / 3600;
+  #             seconds = seconds % 3600;
+  #             int minutes = seconds /  60;
+  #             seconds = seconds % 60;
+  #             return (
+  #               (days ? String(days) + "d " : "") +
+  #               (hours ? String(hours) + "h " : "") +
+  #               (minutes ? String(minutes) + "m " : "") +
+  #               (String(seconds) + "s")
+  #             ).c_str();
 
+  # - platform: atc_mithermometer
+  #   mac_address: "A4:C1:38:6E:AD:63"
+  #   temperature:
+  #     name: "fl1Hallway Temperature"
+  #   humidity:
+  #     name: "fl1Hallway Humidity"
+  #   battery_level:
+  #     name: "fl1Hallway Battery-Level"
+  #   battery_voltage:
+  #     name: "fl1Hallway Battery-Voltage"
 
-  - platform: atc_mithermometer
-    mac_address: "A4:C1:38:6E:AD:63"
-    temperature:
-      name: "mi_1 Temperature"
-    humidity:
-      name: "mi_1 Humidity"
-    battery_level:
-      name: "mi_1 Battery-Level"
-    battery_voltage:
-      name: "mi_1 Battery-Voltage"
+  # - platform: atc_mithermometer
+  #   mac_address: "A4:C1:38:E5:1A:78"
+  #   temperature:
+  #     name: "mi_2 Temperature"
+  #   humidity:
+  #     name: "mi_2 Humidity"
+  #   battery_level:
+  #     name: "mi_2 Battery-Level"
+  #   battery_voltage:
+  #     name: "mi_2 Battery-Voltage"
 
-  - platform: atc_mithermometer
-    mac_address: "A4:C1:38:E5:1A:78"
-    temperature:
-      name: "mi_2 Temperature"
-    humidity:
-      name: "mi_2 Humidity"
-    battery_level:
-      name: "mi_2 Battery-Level"
-    battery_voltage:
-      name: "mi_2 Battery-Voltage"
+  # - platform: atc_mithermometer
+  #   mac_address: "A4:C1:38:64:30:9D"
+  #   temperature:
+  #     name: "outEast Temperature"
+  #   humidity:
+  #     name: "outEast Humidity"
+  #   battery_level:
+  #     name: "outEast Battery-Level"
+  #   battery_voltage:
+  #     name: "outEast Battery-Voltage"
 
-  - platform: atc_mithermometer
-    mac_address: "A4:C1:38:64:30:9D"
-    temperature:
-      name: "mi_3 Temperature"
-    humidity:
-      name: "mi_3 Humidity"
-    battery_level:
-      name: "mi_3 Battery-Level"
-    battery_voltage:
-      name: "mi_3 Battery-Voltage"
-
-  - platform: atc_mithermometer
-    mac_address: "A4:C1:38:AA:ED:A7"
-    temperature:
-      name: "mi_4 Temperature"
-    humidity:
-      name: "mi_4 Humidity"
-    battery_level:
-      name: "mi_4 Battery-Level"
-    battery_voltage:
-      name: "mi_4 Battery-Voltage"
+  # - platform: atc_mithermometer
+  #   mac_address: "A4:C1:38:AA:ED:A7"
+  #   temperature:
+  #     name: "fl1LivingRoom Temperature"
+  #   humidity:
+  #     name: "fl1LivingRoom Humidity"
+  #   battery_level:
+  #     name: "fl1LivingRoom Battery-Level"
+  #   battery_voltage:
+  #     name: "fl1LivingRoom Battery-Voltage"
 
   # - platform: atc_mithermometer
   #   mac_address: "A4:C1:38:30:5D:3B"
@@ -334,7 +335,7 @@ text_sensor:
     entry_exit_event:
       name: $upperDevicename last direction
 
-  - platform: template
-    name: $upperDevicename Uptime Human Readable
-    id: uptime_human
-    icon: mdi:clock-start
+  # - platform: template
+  #   name: $upperDevicename Uptime Human Readable
+  #   id: uptime_human
+  #   icon: mdi:clock-start
