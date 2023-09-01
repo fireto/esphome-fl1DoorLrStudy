@@ -3,4 +3,4 @@ api:
   #  password: !secret apiPwd
   encryption:
     key: !secret apiKey
-  # reboot_timeout: 0s
+  reboot_timeout: 600s
