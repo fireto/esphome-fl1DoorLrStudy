@@ -5,7 +5,8 @@ substitutions:
 
 esphome:
   name: $devicename
-  platform: ESP32
+
+esp32:
   board: esp32-poe
 
 packages:
@@ -63,9 +64,10 @@ vl53l1x:
 roode:
   id: roode_platform
   sampling: 2
+  roi: auto
   detection_thresholds:
-    min: 2% # default minimum is any distance
-    max: 65% # default maximum is 85%  
+    min: 30% # default minimum is any distance
+    max: 85% # default maximum is 85%  
   zones:  
     invert: False
 
@@ -212,7 +214,31 @@ sensor:
   - platform: bh1750
     name: "$upperDevicename Illuminance"
     address: 0x23
-    update_interval: 300s
+    update_interval: 30s
+
+  - platform: roode
+    id: $upperDevicename
+    distance_entry:
+      name: $upperDevicename distance entry
+      filters:
+        - delta: 100.0
+    distance_exit:
+      name: $upperDevicename distance exit
+      filters:
+        - delta: 100.0
+    min_threshold_entry:
+      name: $upperDevicename Zone 0 min
+    max_threshold_entry:
+      name: $upperDevicename Zone 0 max
+    min_threshold_exit:
+      name: $upperDevicename Zone 1 min
+    max_threshold_exit:
+      name: $upperDevicename Zone 1 max
+    roi_height_entry:
+      name: $upperDevicename ROI height
+    roi_width_entry:
+      name: $upperDevicename ROI width    
+
 
   # - platform: uptime
   #   name: Uptime Sensor
